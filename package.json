@@ -1,6 +1,7 @@
 {
   "name": "chattyfy-monorepo",
   "private": true,
+  "version": "1.0.0",
   "packageManager": "npm@10.9.4",
   "workspaces": [
     "apps/*",

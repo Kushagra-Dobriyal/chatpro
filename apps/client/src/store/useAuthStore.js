@@ -139,6 +139,18 @@ export const useAuthStore = create((set, get) => ({ //set is a function you use 
             set({ onlineUsers: usersIds });
         });
 
+        socket.on("userPresenceUpdate", ({ userId, isOnline, lastSeen }) => {
+            // This allows us to update the users list if we have it in memory
+            // Although getUsers is in useMessageStore, we might want to keep
+            // global user status updated or just let useMessageStore handle it.
+            // For now, we update the onlineUsers list if needed.
+            if (isOnline) {
+                set((state) => ({ onlineUsers: [...new Set([...state.onlineUsers, userId])] }));
+            } else {
+                set((state) => ({ onlineUsers: state.onlineUsers.filter(id => id !== userId) }));
+            }
+        });
+
         // Clean up socket on unmount
         return () => {
             if (socket) {

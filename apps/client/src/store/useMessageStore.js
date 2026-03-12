@@ -74,22 +74,59 @@ export const useMessageStore = create((set, get) => ({
         }
     },
 
+    addReaction: async (messageId, emoji) => {
+        try {
+            const res = await axiosInstance.post(`/messages/react/${messageId}`, { emoji });
+            // The message state will be updated via the socket event "messageUpdated" 
+            // but we can also update it locally for immediate feedback
+            set((state) => ({
+                messages: state.messages.map((m) => m._id === messageId ? res.data : m)
+            }));
+        } catch (error) {
+            toast.error("Failed to add reaction");
+        }
+    },
+
+    editMessage: async (messageId, text) => {
+        try {
+            const res = await axiosInstance.patch(`/messages/edit/${messageId}`, { text });
+            set((state) => ({
+                messages: state.messages.map((m) => m._id === messageId ? res.data : m)
+            }));
+            toast.success("Message edited");
+        } catch (error) {
+            toast.error("Failed to edit message");
+        }
+    },
+
     subscribeToMessages: () => {
         const { selectedUser } = get();
         if (!selectedUser) return;
 
         const socket = useAuthStore.getState().socket;
-        if (!socket?.connected) {
-            console.error("Socket not connected");
-            return;
-        }
+        if (!socket?.connected) return;
 
-        // Remove any existing listeners first
         socket.off("newMessage");
+        socket.off("messageUpdated");
+        socket.off("messageDeleted");
 
         socket.on("newMessage", (newMessage) => {
-            const currentMessages = get().messages;
-            set({ messages: [...currentMessages, newMessage] });
+            const isFromSelectedUser = newMessage.senderId === selectedUser._id || newMessage.receiverId === selectedUser._id;
+            if (!isFromSelectedUser) return;
+            
+            set((state) => ({ messages: [...state.messages, newMessage] }));
+        });
+
+        socket.on("messageUpdated", (updatedMessage) => {
+            set((state) => ({
+                messages: state.messages.map((m) => m._id === updatedMessage._id ? updatedMessage : m)
+            }));
+        });
+
+        socket.on("messageDeleted", ({ messageId }) => {
+            set((state) => ({
+                messages: state.messages.filter((m) => m._id !== messageId)
+            }));
         });
     },
 
@@ -97,6 +134,8 @@ export const useMessageStore = create((set, get) => ({
         const socket = useAuthStore.getState().socket;
         if (socket?.connected) {
             socket.off("newMessage");
+            socket.off("messageUpdated");
+            socket.off("messageDeleted");
         }
     },
 

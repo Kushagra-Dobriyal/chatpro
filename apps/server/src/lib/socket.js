@@ -17,14 +17,20 @@ export function getRecieverSocketId(userId){
     return userSocketMap[userId];
 }
 
-io.on("connection", (socket) => {
-    console.log("A user connected", socket.id);
-
+io.on("connection", async (socket) => {
     const userId = socket.handshake.query.userId;
+    if (!userId) return;
 
-    if (userId) { userSocketMap[userId] = socket.id }
+    console.log("A user connected", userId);
+    userSocketMap[userId] = socket.id;
 
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    try {
+        await User.findByIdAndUpdate(userId, { isOnline: true });
+        io.emit("getOnlineUsers", Object.keys(userSocketMap));
+        io.emit("userPresenceUpdate", { userId, isOnline: true });
+    } catch (error) {
+        console.error("Error updating connection presence:", error.message);
+    }
 
     // Handle new messages
     socket.on("sendMessage", (message) => {
@@ -34,10 +40,20 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("disconnect", () => {
-        console.log("A user disconnected", socket.id)
+    socket.on("disconnect", async () => {
+        console.log("A user disconnected", userId);
         delete userSocketMap[userId];
-        io.emit("getOnlineUsers", Object.keys(userSocketMap));
+        
+        try {
+            await User.findByIdAndUpdate(userId, { 
+                isOnline: false, 
+                lastSeen: new Date() 
+            });
+            io.emit("getOnlineUsers", Object.keys(userSocketMap));
+            io.emit("userPresenceUpdate", { userId, isOnline: false, lastSeen: new Date() });
+        } catch (error) {
+            console.error("Error updating disconnection presence:", error.message);
+        }
     })
 
     socket.on("typing" ,({receiverId,senderId})=>{
